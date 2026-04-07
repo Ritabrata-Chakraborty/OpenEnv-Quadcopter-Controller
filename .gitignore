@@ -62,4 +62,4 @@ docker-compose.override.yml
 # Misc
 # -----------------------------
 *.swp
-*.swo
+*.swoassets/
