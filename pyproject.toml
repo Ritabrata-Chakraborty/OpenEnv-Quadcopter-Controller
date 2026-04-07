@@ -1,0 +1,53 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openenv-quadnav"
+version = "0.1.0"
+description = "Quadnav Env environment for OpenEnv"
+requires-python = ">=3.10"
+dependencies = [
+    # Core OpenEnv runtime (provides FastAPI server + HTTP client types)
+    # install from github
+    # "openenv-core[core] @ git+https://github.com/meta-pytorch/OpenEnv.git",
+    "openenv-core[core]>=0.2.2",
+    # Simulation dependencies (used by bundled sim/ physics engine)
+    "numpy>=1.24.0",
+    "matplotlib>=3.7.0",
+    "scikit-image>=0.21.0",
+    "scipy>=1.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+# Server entry point - enables running via: uv run --project . server
+# or: python -m quadnav.server.app
+server = "quadnav.server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["quadnav", "quadnav.server", "quadnav.sim", "quadnav.sim.controller", "quadnav.sim.controller.vehicle", "quadnav.sim.controller.utils"]
+package-dir = { "quadnav" = ".", "quadnav.server" = "server", "quadnav.sim" = "sim", "quadnav.sim.controller" = "sim/controller", "quadnav.sim.controller.vehicle" = "sim/controller/vehicle", "quadnav.sim.controller.utils" = "sim/controller/utils" }
+
+[tool.setuptools.package-data]
+"quadnav.sim" = [
+    "dataset/maps_train/easy/*.png",
+    "dataset/maps_train/medium/*.png",
+    "dataset/maps_train/hard/*.png",
+    "dataset/maps_train/easy_goals/*.json",
+    "dataset/maps_train/medium_goals/*.json",
+    "dataset/maps_train/hard_goals/*.json",
+    "controller/**/*.py",
+]

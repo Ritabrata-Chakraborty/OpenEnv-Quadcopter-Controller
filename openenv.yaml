@@ -1,0 +1,62 @@
+spec_version: 1
+name: quadnav_env
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+description: >
+  Quadcopter point-navigation on 2D occupancy maps.
+  A simulated quadrotor drone must navigate from a fixed start position to a
+  goal waypoint while avoiding obstacles, using 40-bin LiDAR raycasting and
+  a full 3D physics engine (Quadcopter_SimCon).
+
+action_space:
+  type: continuous
+  fields:
+    vx:        {type: float, range: [-1, 1], description: "Forward velocity (mapped to [0, 3] m/s)"}
+    vy:        {type: float, range: [-1, 1], description: "Lateral velocity (mapped to [-1.5, 1.5] m/s)"}
+    yaw_rate:  {type: float, range: [-1, 1], description: "Yaw rate (mapped to [-60, 60] deg/s)"}
+
+observation_space:
+  type: mixed
+  fields:
+    lidar_bins:    {type: list[float], length: 40, range: [0, 1], description: "Normalised LiDAR distances, 9° per bin, starting from drone heading"}
+    goal_dist:     {type: float, range: [0, 1],   description: "Normalised Euclidean distance to goal"}
+    goal_angle:    {type: float, range: [-1, 1],  description: "Normalised angle from heading to goal (positive = left)"}
+    prev_vx:       {type: float, range: [-1, 1],  description: "Previous vx action"}
+    prev_vy:       {type: float, range: [-1, 1],  description: "Previous vy action"}
+    prev_yaw_rate: {type: float, range: [-1, 1],  description: "Previous yaw_rate action"}
+
+tasks:
+  - name: easy
+    description: "Open field with minimal obstacles. Navigate from fixed start to goal in 60 seconds (600 steps)."
+    episode_index: 1
+    seed: 3
+    max_steps: 600
+    difficulty: easy
+
+  - name: medium
+    description: "Cluttered corridor with moderate obstacle density. Navigate from fixed start to goal in 40 seconds (400 steps)."
+    episode_index: 1
+    seed: 4
+    max_steps: 400
+    difficulty: medium
+
+  - name: hard
+    description: "Complex map with high obstacle density. Navigate from fixed start to goal in 60 seconds (600 steps)."
+    episode_index: 1
+    seed: 1
+    max_steps: 600
+    difficulty: hard
+
+reward:
+  type: shaped
+  description: >
+    Reward shaped to encourage fast and safe goal navigation. Total reward sums eight components:
+    (1) distance-based bounded reward (proximity to goal);
+    (2–4) velocity penalties for forward speed deviation, lateral motion, and yaw rate;
+    (5) heading alignment bonus (goal bearing);
+    (6) obstacle proximity penalty when LiDAR distance falls below threshold;
+    (7) per-step living cost to incentivize speed;
+    (8) terminal bonuses: +2500 (goal reached), −2000 (crash), −100 (timeout).
