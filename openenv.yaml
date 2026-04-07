@@ -1,8 +1,6 @@
 spec_version: 1
 name: quadnav_env
 type: space
-runtime: fastapi
-app: server.app:app
 port: 8000
 
 description: >
