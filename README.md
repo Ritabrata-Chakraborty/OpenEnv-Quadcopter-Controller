@@ -11,11 +11,20 @@ tags:
   - openenv
 ---
 
-# Quadnav Environment
+# Quadnav: Quadcopter Point-Navigation Environment
 
-A quadcopter point-navigation environment wrapped as an OpenEnv server. A simulated quadcopter must navigate 2D occupancy maps — floor plans, outdoor terrain grids, or procedurally generated obstacle fields — and reach a goal position as quickly and safely as possible. The environment is grounded in 3D physics via `quadnav.sim.controller` and uses a 40-bin LiDAR-like raycasting sensor that mimics the kind of rangefinder suites found on real autonomous vehicles, making learned policies directly transferable to physical systems.
+![Navigation Demo](assets/DDPG_Example.gif)
 
-This environment is useful for benchmarking local motion planning, obstacle avoidance, and goal-directed navigation under realistic kinematic constraints.
+## Overview
+
+**Quadnav** is a physics-based quadcopter navigation environment designed for training and evaluating autonomous navigation agents. 
+
+The environment features a **realistic 6-DOF rigid-body simulator** with a **velocity-based controller** that accepts three normalized control inputs—forward, lateral, and angular velocity—to navigate from start positions to goal locations using:
+- A 360° LiDAR scan (40 binned rays) for obstacle detection
+- Normalized distance to goal
+- Heading error relative to goal
+
+Agents (RL policies, LLMs, classical planners, etc.) operate directly on these observations and command the velocity controller, which handles the low-level physics and motor dynamics.
 
 ---
 
@@ -23,28 +32,28 @@ This environment is useful for benchmarking local motion planning, obstacle avoi
 
 The quadcopter dynamics are simulated by the `quadnav.sim.controller` package — a full 6-DOF rigid-body simulator grounded in Newton-Euler equations with second-order motor dynamics.
 
-For detailed documentation on the physics engine, control cascade, trajectory generation, state vectors, and wind models, see [sim/README.md](sim/README.md).
-
-**Quick overview:**
+**Key features:**
 - **State:** 21-element vector (position, quaternion, velocities, motor speeds)
 - **Control:** 4-layer cascade (position → velocity → attitude → rate → motor mixer)
-- **Trajectories:** Polynomial minima (velocity, accel, jerk, snap) with optional stops
-- **Wind:** Configurable disturbance models (None, Fixed, Sine, Random)
-- **Frames:** NED (North-East-Down) or ENU (East-North-Up) selectable
+- **Trajectories:** Polynomial minimum jerk/snap trajectories
+- **Wind:** Configurable disturbance models (None, Fixed, Sine, Random)  
+- **Sensor:** 40-bin LiDAR-like raycasting at 12 m range
+
+For detailed documentation on the physics engine, see [sim/README.md](sim/README.md).
 
 ---
 
 ## Action Space
 
-**`QuadnavAction`** — one action per step, three continuous values:
+**`QuadnavAction`** — one action per step, three continuous normalized values:
 
-| Field | Type | Range | Meaning |
-|-------|------|-------|---------|
-| `vx` | float | [0, 1] | Forward linear velocity (normalised, 0 = stop, 1 = full speed) |
-| `vy` | float | [-1, 1] | Left/right lateral velocity (normalised) |
-| `yaw_rate` | float | [-1, 1] | Clockwise/counter-clockwise rotation rate (normalised) |
+| Field | Type | Range | Physical Meaning |
+|-------|------|-------|------------------|
+| `vx` | float | [0, 1] | Forward velocity (0 = stop, 1 = ~3 m/s) |
+| `vy` | float | [-1, 1] | Lateral velocity (left/right strafe) |
+| `yaw_rate` | float | [-1, 1] | Angular velocity (~60°/s max) |
 
-Values are scaled internally to physical velocity commands before being applied to the simulator. Altitude is held constant by the low-level flight controller; the agent only controls horizontal motion.
+Altitude is held constant by the low-level flight controller; the agent only controls horizontal motion and heading.
 
 ---
 
@@ -52,85 +61,97 @@ Values are scaled internally to physical velocity commands before being applied 
 
 **`QuadnavObservation`** — returned after every `reset()` and `step()`:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `lidar` | list[float] \[40\] | Normalised range readings, one per angular bin (0 = contact, 1 = max range) |
-| `goal_dist` | float | Euclidean distance to goal in metres (normalised by sensor range) |
-| `goal_angle` | float | Bearing to goal in the robot frame, radians in [-π, π] |
-| `prev_vx` | float | Previous step's `vx` command |
-| `prev_vy` | float | Previous step's `vy` command |
-| `prev_yaw_rate` | float | Previous step's `yaw_rate` command |
+| Field | Type | Size | Description |
+|-------|------|------|-------------|
+| `lidar_bins` | list[float] | 40 | Normalised LiDAR range [0, 1], one per angular bin |
+| `goal_dist` | float | 1 | Distance to goal (normalised by sensor range) |
+| `goal_angle` | float | 1 | Bearing to goal in robot frame (normalised [-1, 1]) |
+| `prev_vx` | float | 1 | Previous step's vx command |
+| `prev_vy` | float | 1 | Previous step's vy command |
+| `prev_yaw_rate` | float | 1 | Previous step's yaw_rate command |
 
-Total observation vector length: **45** (40 LiDAR + 5 kinematic context).
+**Total observation vector: 45 elements** (40 LiDAR + 5 context)
 
 ---
 
 ## State
 
-**`QuadnavState`** — full environment state, accessible via `env.state`:
+**`QuadnavState`** — full environment state, accessible via `env.state()`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pos_x`, `pos_y`, `pos_z` | float | World-frame position (metres) |
+| `pos_x`, `pos_y`, `pos_z` | float | World position (metres) |
 | `roll`, `pitch`, `yaw` | float | Euler angles (radians) |
-| `vel_x`, `vel_y`, `vel_z` | float | Body-frame velocities (m/s) |
-| `goal_x`, `goal_y` | float | Goal position in world frame |
-| `goal_dist` | float | Current distance to goal (metres) |
-| `elapsed_time` | float | Seconds elapsed in the current episode |
-| `crashed` | bool | Whether the vehicle has collided with an obstacle |
-| `success` | bool | Whether the goal has been reached |
+| `vel_x`, `vel_y`, `vel_z` | float | Velocities (m/s) |
+| `goal_x`, `goal_y` | float | Goal position (world frame) |
+| `goal_dist` | float | Euclidean distance to goal (metres) |
+| `elapsed_time` | float | Episode duration (seconds) |
+| `outcome` | str | Episode result: `"success"`, `"crash"`, `"timeout"`, `"running"` |
 
 ---
 
 ## Reward Function
 
-Reward is shaped to encourage fast and safe goal approach:
+The reward is shaped to encourage **fast**, **safe**, and **goal-directed** navigation.
 
-$$r_{\text{total}} = r_{\text{dist}} + r_{\text{vlin}} + r_{\text{vlat}} + r_{\text{vang}} + r_{\text{yaw}} + r_{\text{obs}} + r_{\text{live}} + r_{\text{term}}$$
+### Base Reward Equation
 
-| Term | Expression | Description |
-|------|-----------|-------------|
-| $r_{\text{dist}}$ | $\dfrac{2d_0}{d_0 + d} - 1$ | Bounded proximity reward; increases as agent approaches goal. $d_0$ = initial distance, $d$ = current distance. |
-| $r_{\text{vlin}}$ | $-\left(\dfrac{v_{\max} - v_x}{v_{\max}}\right)^2$ | Encourages forward speed close to $v_{\max}$ (active progress toward goal). |
-| $r_{\text{vlat}}$ | $-\dot{y}_t^2$ | Penalizes lateral motion $(v_y)$ for efficient, goal-directed flight. |
-| $r_{\text{vang}}$ | $-\dot{\psi}_t^2$ | Penalizes excessive yaw rate $(\dot{\psi})$ for smooth heading control. |
-| $r_{\text{yaw}}$ | $-\|\theta_{\text{goal}}\|$ | Penalizes heading misalignment with goal bearing. |
-| $r_{\text{obs}}$ | $\begin{cases}\lambda_o & d_{\text{obs}} < \tau_o \\ 0 & \text{otherwise}\end{cases}$ | Obstacle proximity penalty when LiDAR distance $d_{\text{obs}}$ falls below threshold $\tau_o$. |
-| $r_{\text{live}}$ | $-1$ | Per-step penalty (−1 per timestep) to incentivize faster episode completion. |
-| $r_{\text{term}}$ | $\{+2500, -2000, -100\}$ | Terminal rewards: success, crash, timeout respectively. |
+```
+reward = r_distance + r_forward_vel + r_lateral_vel + r_angular_vel + r_yaw_align + r_obstacle + r_step_penalty + r_terminal
+```
+
+### Reward Components
+
+| Component | Computation | Purpose |
+|-----------|-----------|---------|
+| **Distance** | `2 × d₀ / (d₀ + d) − 1` | Bounded progress: increases as agent approaches goal. d₀ = initial distance, d = current. |
+| **Forward Vel** | `−(1 − vₓ / vₘₐₓ)²` | Encourage forward velocity close to max for active progress |
+| **Lateral Vel** | `−vᵧ²` | Penalize inefficient lateral motion (strafe) |
+| **Angular Vel** | `−ψ̇²` | Penalize excessive yaw rate (favor smooth turning) |
+| **Yaw Align** | `−\|θ_goal\|` | Penalize heading misalignment with goal bearing |
+| **Obstacle** | `−20` if `d_obs < 1.0m`, else `0` | Proximity penalty when obstacles detected nearby |
+| **Step Cost** | `−1` per timestep | Incentivize completion speed |
+| **Terminal** | `+2500 / −2000 / −100` | Success / Crash / Timeout |
+
+**Example:** An agent that reaches the goal quickly in an obstacle-free area receives a strong positive cumulative reward.
 
 ---
 
 ## Tasks
 
-Three tasks of increasing difficulty are registered in `openenv.yaml`. Each uses a different occupancy map and starting configuration:
+Three difficulty levels are available. Each uses different maps and obstacle density:
 
-| Task | Environment | Density | Time Limit |
-|------|-------------|---------|-----------|
-| **Easy** | Open field (200×200 m), minimal obstacles | Low | 60 s |
-| **Medium** | Cluttered corridor (200×200 m), moderate obstacles | Medium | 40 s |
-| **Hard** | Complex map (< 200×200 m), dense obstacles | High | 60 s |
+| Task | Obstacle Density | Map Size | Time Limit | Typical Difficulty |
+|------|-----------------|----------|-----------|-------------------|
+| **Easy** | Low (open field) | 200×200 m | 60 s | Simple corridor navigation |
+| **Medium** | Medium (cluttered) | 200×200 m | 40 s | Dense obstacles, narrow passages |
+| **Hard** | High (maze-like) | <200×200 m | 60 s | Complex topology with dead-ends |
 
-Each episode tasks the agent to navigate from a fixed start to a randomly selected goal, using only LiDAR observations and previous actions.
+Each episode:
+- Agent spawns at a fixed start location
+- Goal is randomly selected within the map
+- Agent must navigate using only LiDAR, distance, and angle observations
+- Episode terminates on success, crash, or timeout
 
 ---
 
-## Setup
 
-### Docker Workflow
+## Docker Deployment
+
+### Build and Run Locally
 
 ```bash
-# 1. Clean Images & Containers
+# 1. Clean up old images and containers
 docker stop $(docker ps -q) 2>/dev/null
 docker rm $(docker ps -aq) 2>/dev/null
 docker rmi -f $(docker images -q) 2>/dev/null
 
-# 2. Build Image (from project root, one level up)
+# 2. Build the image (from project root, one level up)
 cd ..
 docker build -t quadnav:latest quadnav/
 cd quadnav
 
-# 3. Run Container (env vars passed from .env file)
+# 3. Start the server (passes .env file for API credentials)
 docker run -d \
   --name quadnav-env \
   -p 8000:8000 \
@@ -138,24 +159,27 @@ docker run -d \
   -e QUADNAV_ENV_URL=http://localhost:8000 \
   quadnav:latest
 
-# Wait for server to be ready
-sleep 10
+# 4. Wait for server to initialize
+sleep 15
 
-# 4. Run Inference (no .env copy needed)
-docker exec -w /app/env quadnav-env bash -c "
-uv run python3 inference.py
-"
+# 5. Run inference (e.g., LLM-driven navigation)
+docker exec -w /app/env quadnav-env bash -c "uv run python3 inference.py"
 
-# 5. Cleanup
+# 6. Cleanup
 docker stop quadnav-env && docker rm quadnav-env
 ```
 
 ### Deploy to Hugging Face Spaces
 
+The Dockerfile is automatically built and deployed to HF Spaces:
+
 ```bash
-# From the quadnav_env directory (where openenv.yaml lives)
-openenv push
+git add .
+git commit -m "Update Quadnav"
+git push  # HF builds and deploys automatically
 ```
+
+Access the web interface at: `https://huggingface.co/spaces/14372-Ritabrata/quadnav`
 
 ---
 
@@ -163,26 +187,73 @@ openenv push
 
 ```
 quadnav/
-├── __init__.py                       # Package root
-├── models.py                         # Pydantic models: Action, Observation, State
-├── client.py                         # QuadnavEnv (EnvClient subclass)
-├── openenv.yaml                      # OpenEnv manifest and task definitions
-├── pyproject.toml                    # Package metadata and dependencies
-├── Dockerfile                        # Container image definition
+├── __init__.py                       # Package entry point
+├── models.py                         # Pydantic models (Action, Observation, State)
+├── client.py                         # Client-side environment wrapper
+├── inference.py                      # LLM-driven inference loop
+├── openenv.yaml                      # OpenEnv task manifest
+├── pyproject.toml                    # Dependencies and metadata
+├── Dockerfile                        # Container build config
 ├── README.md                         # This file
-├── DOCKER_SETUP.md                   # Deployment & Docker guide
+│
 ├── server/
 │   ├── app.py                        # FastAPI application
-│   ├── environment.py                # Environment wrapper
-│   ├── tasks.py                      # Async task handlers
-│   └── Dockerfile                    # Server build config
-└── sim/
-    ├── README.md                     # Physics engine documentation
-    ├── env.py                        # Gym-style environment interface
-    └── controller/                   # Quadcopter physics & control
-        ├── config.py, trajectory.py, control.py, run_simulation.py, ...
-        ├── vehicle/                  # Rigid-body dynamics integration
-        └── utils/                    # Quaternions, rotations, wind, animation
+│   ├── environment.py                # Environment server (OpenEnv wrapper)
+│   └── tasks.py                      # Async request handlers
+│
+├── sim/
+│   ├── README.md                     # Physics engine documentation
+│   ├── env.py                        # Gym-style environment interface
+│   ├── parameter.py                  # Physics parameters
+│   ├── dataset/
+│   │   ├── easy/                     # Easy task maps and goals
+│   │   ├── medium/                   # Medium task maps and goals
+│   │   └── hard/                     # Hard task maps and goals
+│   └── controller/                   # Quadcopter physics and control
+│       ├── vehicle/                  # 6-DOF rigid-body simulator
+│       ├── control.py                # 4-layer control cascade
+│       └── utils/                    # Quaternions, rotations, wind models
+│
+├── assets/
+│   └── point_goal_nav.gif            # Demonstration video
+└── tests/                            # Unit and integration tests
 ```
 
-For **physics engine details**, see [sim/README.md](sim/README.md).
+---
+
+## Quick Start
+
+### 1. Start the environment server
+
+```bash
+docker run -d -p 8000:8000 --env-file .env quadnav:latest
+```
+
+The server is now available at `http://localhost:8000`.
+
+### 2. Connect and run an episode
+
+```python
+from quadnav.client import QuadnavEnv
+from quadnav.models import QuadnavAction
+
+async with QuadnavEnv(base_url="http://localhost:8000") as env:
+    obs = await env.reset(task="easy")
+    
+    for step in range(600):
+        # Example: simple forward motion
+        action = QuadnavAction(vx=0.7, vy=0.0, yaw_rate=0.0)
+        obs = await env.step(action)
+        
+        print(f"Step {step}: Distance={obs.goal_dist:.2f}, Reward={obs.reward:.2f}")
+        
+        if obs.done:
+            print(f"Episode Ended: {obs.done}")
+            break
+```
+
+### 3. Web Interface (Optional)
+
+Visit `http://localhost:8000` to visualize the environment in real-time.
+
+---
