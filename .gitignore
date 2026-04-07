@@ -17,9 +17,12 @@ env/
 # Packaging / Build Artifacts
 # -----------------------------
 *.egg-info/
+*.egg-info
+*.egg
 dist/
 build/
-*.egg
+docs/
+docs/_build/
 
 # -----------------------------
 # Environment Variables
@@ -49,11 +52,6 @@ build/
 # -----------------------------
 .DS_Store
 Thumbs.db
-
-# -----------------------------
-# Documentations
-# -----------------------------
-docs/
 
 # -----------------------------
 # Docker (Optional)
