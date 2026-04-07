@@ -117,17 +117,38 @@ Each episode tasks the agent to navigate from a fixed start to a randomly select
 
 ## Setup
 
-### Build and Run with Docker
+### Docker Workflow
 
 ```bash
-# From the quadnav_env directory
-docker build -t quadnav-env:latest .
+# 1. Clean Images & Containers
+docker stop $(docker ps -q) 2>/dev/null
+docker rm $(docker ps -aq) 2>/dev/null
+docker rmi -f $(docker images -q) 2>/dev/null
 
-docker run -p 8000:8000 quadnav-env:latest
+# 2. Build Image (from project root, one level up)
+cd ..
+docker build -t quadnav:latest quadnav/
+cd quadnav
+
+# 3. Run Container (env vars passed from .env file)
+docker run -d \
+  --name quadnav-env \
+  -p 8000:8000 \
+  --env-file .env \
+  -e QUADNAV_ENV_URL=http://localhost:8000 \
+  quadnav:latest
+
+# Wait for server to be ready
+sleep 10
+
+# 4. Run Inference (no .env copy needed)
+docker exec -w /app/env quadnav-env bash -c "
+uv run python3 inference.py
+"
+
+# 5. Cleanup
+docker stop quadnav-env && docker rm quadnav-env
 ```
-
-The server will be available at `http://localhost:8000`. The web UI is at `/web` and the API docs at `/docs`.
-
 
 ### Deploy to Hugging Face Spaces
 
