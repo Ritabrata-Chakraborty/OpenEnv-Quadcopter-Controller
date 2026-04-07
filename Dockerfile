@@ -76,4 +76,5 @@ ENV UV_NO_SYNC=1
 
 # Run the FastAPI server
 # Running from /app/env ensures README.md is in working directory for OpenEnv discovery
+WORKDIR /app/env
 CMD ["uvicorn", "quadnav.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
