@@ -1,76 +1,68 @@
-# Environment & Secrets
-.env
-.env.local
-.env.*.local
-
-# Python
+# -----------------------------
+# Python bytecode
+# -----------------------------
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-pip-log.txt
-pip-delete-this-directory.txt
-.pytest_cache/
 
-# Virtual Environments
-venv/
-venv_*/
-ENV/
-env/
-.venv
+# -----------------------------
+# Virtual environments
+# -----------------------------
 .venv/
+venv/
+env/
 
-# IDE & Editor
+# -----------------------------
+# Packaging / build artifacts
+# -----------------------------
+*.egg-info/
+dist/
+build/
+*.egg
+
+# -----------------------------
+# Environment variables
+# -----------------------------
+.env
+.env.*
+
+# Keep template if you use one
+!.env.example
+
+# -----------------------------
+# Logs & runtime artifacts
+# -----------------------------
+*.log
+*.out
+*.err
+
+# -----------------------------
+# IDE / editor
+# -----------------------------
+.claude/
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
+
+# -----------------------------
+# OS files
+# -----------------------------
 .DS_Store
 Thumbs.db
-*.sublime-project
-*.sublime-workspace
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
+# -----------------------------
+# UV (keep lockfile!)
+# -----------------------------
+# DO NOT ignore uv.lock
+# uv.lock
 
-# Testing
-.coverage
-.pytest_cache/
-htmlcov/
-
-# Logs
-*.log
-logs/
-
-# Build artifacts
-*.tar.gz
-*.zip
-
-# Docker
+# -----------------------------
+# Docker (optional)
+# -----------------------------
 docker-compose.override.yml
 
-# Local documentation/notes
-RUN_INFERENCE.md
-DOCKER_SETUP.md
-
-# Dataset caches (optional if too large)
-# sim/dataset/
+# -----------------------------
+# Misc
+# -----------------------------
+*.swp
+*.swo
