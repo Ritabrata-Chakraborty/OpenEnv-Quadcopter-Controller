@@ -7,14 +7,14 @@ __pycache__/
 *$py.class
 
 # -----------------------------
-# Virtual environments
+# Virtual Environments
 # -----------------------------
 .venv/
 venv/
 env/
 
 # -----------------------------
-# Packaging / build artifacts
+# Packaging / Build Artifacts
 # -----------------------------
 *.egg-info/
 dist/
@@ -22,7 +22,7 @@ build/
 *.egg
 
 # -----------------------------
-# Environment variables
+# Environment Variables
 # -----------------------------
 .env
 .env.*
@@ -31,33 +31,32 @@ build/
 !.env.example
 
 # -----------------------------
-# Logs & runtime artifacts
+# Logs & Runtime Artifacts
 # -----------------------------
 *.log
 *.out
 *.err
 
 # -----------------------------
-# IDE / editor
+# IDE / Editor
 # -----------------------------
 .claude/
 .vscode/
 .idea/
 
 # -----------------------------
-# OS files
+# OS Files
 # -----------------------------
 .DS_Store
 Thumbs.db
 
 # -----------------------------
-# UV (keep lockfile!)
+# Documentations
 # -----------------------------
-# DO NOT ignore uv.lock
-# uv.lock
+docs/
 
 # -----------------------------
-# Docker (optional)
+# Docker (Optional)
 # -----------------------------
 docker-compose.override.yml
 
