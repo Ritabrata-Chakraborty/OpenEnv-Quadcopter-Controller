@@ -260,10 +260,7 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
     score = grade(task_name, outcome, initial_dist, final_dist,
                   steps, max_steps, near_obstacle_steps)
 
-    safety_pct = 100.0 * (1.0 - near_obstacle_steps / max(steps, 1))
-    print(f"[END] task={task_name} score={score:.4f} outcome={outcome} steps={steps} "
-          f"initial_dist={initial_dist:.3f} final_dist={final_dist:.3f} "
-          f"near_obstacle_steps={near_obstacle_steps} safety_pct={safety_pct:.0f}", flush=True)
+    print(f"[END] task={task_name} score={score:.2f} outcome={outcome} steps={steps}", flush=True)
 
     return dict(task=task_name, score=score, outcome=outcome,
                 steps=steps, initial_dist=initial_dist, final_dist=final_dist,
@@ -287,16 +284,10 @@ async def main_async() -> None:
             results.append(result)
 
     # Summary
-    print("\n" + "=" * 55)
-    print("QUADNAV SCORES")
-    print("=" * 55)
     total = 0.0
     for r in results:
-        print(f"  {r['task']:8s}  score={r['score']:.4f}  ({r['outcome']})")
         total += r["score"]
-    print("-" * 55)
-    print(f"  {'MEAN':8s}  score={total / len(results):.4f}")
-    print("=" * 55)
+    print(f"\n[SUMMARY] mean_score={total / len(results):.2f}", flush=True)
 
 
 def main() -> None:
