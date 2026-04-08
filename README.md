@@ -17,7 +17,7 @@ tags:
 
 ## Overview
 
-**Quadnav** is a physics-based quadcopter navigation environment designed for training and evaluating autonomous navigation agents. 
+**Quadnav** is a physics-based quadcopter navigation environment designed for training and evaluating autonomous navigation agents via OpenEnv. 
 
 The environment features a **realistic 6-DOF rigid-body simulator** with a **velocity-based controller** that accepts three normalized control inputs—forward, lateral, and angular velocity—to navigate from start positions to goal locations using:
 - A 360° LiDAR scan (40 binned rays) for obstacle detection
