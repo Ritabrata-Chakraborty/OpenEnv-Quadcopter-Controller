@@ -72,8 +72,10 @@ from openenv.core.env_server.interfaces import Environment  # noqa: E402
 
 try:
     from ..models import QuadnavAction, QuadnavObservation, QuadnavState
+    from .tasks import get_task
 except ImportError:
     from quadnav.models import QuadnavAction, QuadnavObservation, QuadnavState
+    from quadnav.server.tasks import get_task
 
 # Map/goal directories per difficulty tier.
 _DATASET = os.path.join(_QUADRL_PATH, "dataset")
@@ -107,6 +109,10 @@ class QuadnavEnvironment(Environment):
         self._task: str = "easy"
         self._map_id: int = 0
         self._map_seed: int = 0
+
+        # ─── Grading state (set by reset, used by _compute_score) ───
+        self._initial_goal_dist: float = 0.0
+        self._max_steps: int = 600
 
         maps_dir, goals_dir = _DIRS["easy"]
         self._env = QuadnavEnv(maps_dir=maps_dir, goals_dir=goals_dir)
@@ -165,6 +171,12 @@ class QuadnavEnvironment(Environment):
         np.random.seed(map_seed)
 
         self._obs_vec = self._env.reset()
+
+        # ─── Grading: store initial distance and step budget ───
+        task_obj = get_task(task)
+        self._max_steps = task_obj.max_steps
+        self._initial_goal_dist = float(self._obs_vec[40])
+
         return self._build_obs(done=False)
 
     # ------------------------------------------------------------------
@@ -200,11 +212,18 @@ class QuadnavEnvironment(Environment):
 
         self._obs_vec = obs_vec
         self._last_reward = float(reward)
-        self._outcome = outcome
-        self._done = bool(done)
         self._step_count += 1
 
-        return self._build_obs(done=done)
+        # Physics-level termination (crash, success, 60 s physics timeout)
+        if done:
+            self._outcome = outcome
+            self._done = True
+        # Server-side per-task step budget (e.g. medium = 400 steps)
+        elif self._step_count >= self._max_steps:
+            self._outcome = "timeout"
+            self._done = True
+
+        return self._build_obs(done=self._done)
 
     # ------------------------------------------------------------------
     # state
@@ -244,11 +263,29 @@ class QuadnavEnvironment(Environment):
             elapsed_time=float(env.total_time),
             last_reward=self._last_reward,
             outcome=self._outcome,
+            score=self._compute_score(),
         )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _compute_score(self) -> float:
+        """Compute task-graded score using the server's grader.
+
+        Returns 0.0 while the episode is still running.
+        """
+        if self._outcome == "running":
+            return 0.0
+        task_obj = get_task(self._task)
+        final_goal_dist = float(self._obs_vec[40])
+        return task_obj.grader(
+            self._outcome,
+            self._initial_goal_dist,
+            final_goal_dist,
+            self._step_count,
+            task_obj.max_steps,
+        )
 
     def _build_episode_id(self) -> str:
         """Construct a human-readable episode ID from metadata.

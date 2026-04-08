@@ -29,59 +29,21 @@ from quadnav.models import QuadnavAction
 API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 API_KEY: str = os.environ.get("HF_TOKEN") or os.environ.get("API_KEY", "")
 MODEL_NAME: str = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
-ENV_URL: str = os.environ.get("QUADNAV_ENV_URL", "http://localhost:8000")
+ENV_URL: str = os.environ.get("QUADNAV_ENV_URL") or os.environ.get("ENV_URL") or "http://localhost:8000"
 
 TEMPERATURE: float = 0.0
 MAX_TOKENS: int = 80
 
-# LiDAR bin index below which we count a step as "near an obstacle"
-# 0.15 * SENSOR_RANGE (12 m) ≈ 1.8 m
-NEAR_OBSTACLE_THRESHOLD: float = 0.15
-
 # ---------------------------------------------------------------------------
-# Task definitions (easy → medium → hard)
+# Task names and step budgets (for LLM prompt and loop safety bound).
+# Grading is computed server-side by the task graders in server/tasks.py.
 # ---------------------------------------------------------------------------
 
 TASKS = [
-    dict(name="easy",   difficulty="easy",   max_steps=600),
-    dict(name="medium", difficulty="medium", max_steps=400),
-    dict(name="hard",   difficulty="hard",   max_steps=600),
+    {"name": "easy",   "max_steps": 600},
+    {"name": "medium", "max_steps": 400},
+    {"name": "hard",   "max_steps": 600},
 ]
-
-# ---------------------------------------------------------------------------
-# Grader
-#
-# Unified scoring formula:
-#   score = 0.8 × progress + 0.1 × efficiency + 0.1 × safety
-#
-# Where:
-#   progress   (0.80) – fraction of initial distance closed
-#   efficiency (0.10) – step economy: 1 – steps_taken / max_steps
-#   safety     (0.10) – fraction of steps spent away from obstacles
-#
-# Final score clamped to [0, 1] and rounded to 4 decimals.
-# ---------------------------------------------------------------------------
-
-def grade(
-    task_name: str,
-    outcome: str,
-    initial_dist: float,
-    final_dist: float,
-    steps: int,
-    max_steps: int,
-    near_obstacle_steps: int,
-) -> float:
-    if initial_dist <= 0:
-        return 0.01
-
-    progress   = max(0.0, min(1.0, 1.0 - final_dist / initial_dist))
-    efficiency = 1.0 - steps / max_steps   if steps > 0 else 1.0
-    safety     = 1.0 - near_obstacle_steps / max(steps, 1)
-
-    score = 0.8 * progress + 0.1 * efficiency + 0.1 * safety
-
-    # Clamp strictly inside (0, 1) — validator rejects exactly 0.0 or 1.0
-    return round(min(0.99, max(0.01, score)), 2)
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +120,7 @@ def build_user_prompt(step: int, max_steps: int, obs) -> str:
         f"Step {step}/{max_steps}\n"
         f"LiDAR  front={lidar['front']}  left={lidar['left']}  "
         f"back={lidar['back']}  right={lidar['right']}\n"
-        f"Goal   dist={obs.goal_dist:.3f}  direction={goal_dir}\n"
+        f"Goal   dist={obs.goal_dist:.2f}  direction={goal_dir}\n"
         f"Output JSON:"
     )
 
@@ -197,26 +159,18 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
     max_steps = task["max_steps"]
 
     # ── START ──────────────────────────────────────────────────────────────
-    print(f"[START] task={task_name} difficulty={task['difficulty']} max_steps={max_steps}", flush=True)
+    print(f"[START] task={task_name} max_steps={max_steps}", flush=True)
 
-    result = await env_client.reset(task=task["difficulty"])
+    result = await env_client.reset(task=task_name)
     obs    = result.observation
-    initial_dist = float(obs.goal_dist)
-    print(f"[START] task={task_name} initial_dist={initial_dist:.3f} goal_angle={obs.goal_angle:.3f}", flush=True)
+    print(f"[START] task={task_name} goal_dist={obs.goal_dist:.2f} goal_angle={obs.goal_angle:.2f}", flush=True)
 
-    outcome           = "timeout"
-    steps             = 0
-    final_dist        = initial_dist
-    near_obstacle_steps = 0
+    steps = 0
 
     # ── STEP LOOP ──────────────────────────────────────────────────────────
     for step_num in range(1, max_steps + 1):
         if result.done:
             break
-
-        # Count steps where any LiDAR bin is dangerously close
-        if obs.lidar_bins and min(obs.lidar_bins) < NEAR_OBSTACLE_THRESHOLD:
-            near_obstacle_steps += 1
 
         user_prompt = build_user_prompt(step_num, max_steps, obs)
         messages = [
@@ -239,13 +193,12 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
         action_dict = parse_action(raw) or FALLBACK_ACTION
         action      = QuadnavAction(**action_dict)
 
-        result     = await env_client.step(action)
-        obs        = result.observation
-        steps      = step_num
-        final_dist = float(obs.goal_dist)
+        result = await env_client.step(action)
+        obs    = result.observation
+        steps  = step_num
 
-        lidar  = lidar_summary(obs.lidar_bins)
-        print(f"[STEP] step={step_num} reward={result.reward:+.2f} goal_dist={final_dist:.3f} "
+        lidar = lidar_summary(obs.lidar_bins)
+        print(f"[STEP] step={step_num} reward={result.reward:.2f} goal_dist={obs.goal_dist:.2f} "
               f"front={lidar['front']} back={lidar['back']} "
               f"left={lidar['left']} right={lidar['right']} done={result.done}", flush=True)
 
@@ -253,18 +206,12 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
             break
 
     # ── END ────────────────────────────────────────────────────────────────
-    if result.done:
-        state  = await env_client.state()
-        outcome = state.outcome
+    # Score is computed server-side by the task's grader function.
+    state = await env_client.state()
 
-    score = grade(task_name, outcome, initial_dist, final_dist,
-                  steps, max_steps, near_obstacle_steps)
+    print(f"[END] task={task_name} score={state.score:.2f} outcome={state.outcome} steps={steps}", flush=True)
 
-    print(f"[END] task={task_name} score={score:.2f} outcome={outcome} steps={steps}", flush=True)
-
-    return dict(task=task_name, score=score, outcome=outcome,
-                steps=steps, initial_dist=initial_dist, final_dist=final_dist,
-                near_obstacle_steps=near_obstacle_steps)
+    return dict(task=task_name, score=state.score, outcome=state.outcome, steps=steps)
 
 
 # ---------------------------------------------------------------------------

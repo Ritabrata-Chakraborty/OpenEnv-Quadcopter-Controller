@@ -94,4 +94,5 @@ class QuadnavEnv(EnvClient[QuadnavAction, QuadnavObservation, QuadnavState]):
             elapsed_time=payload.get("elapsed_time", 0.0),
             last_reward=payload.get("last_reward", 0.0),
             outcome=payload.get("outcome", "running"),
+            score=payload.get("score", 0.0),
         )

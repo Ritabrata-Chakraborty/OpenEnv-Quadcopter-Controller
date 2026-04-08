@@ -104,3 +104,7 @@ class QuadnavState(State):
         default="running",
         description="Episode outcome: 'running', 'success', 'crash', or 'timeout'",
     )
+    score: float = Field(
+        default=0.0,
+        description="Task-graded score in (0.01, 0.99), computed when episode ends",
+    )
