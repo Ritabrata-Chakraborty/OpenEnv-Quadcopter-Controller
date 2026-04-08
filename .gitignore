@@ -66,3 +66,4 @@ docker-compose.override.yml
 *.swo
 assets/
 references/
+example/
