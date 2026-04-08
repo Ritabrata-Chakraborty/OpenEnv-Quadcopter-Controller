@@ -220,14 +220,12 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
     max_steps = task["max_steps"]
 
     # ── START ──────────────────────────────────────────────────────────────
-    print(f"\n[Start] Task={task_name}  Difficulty={task['difficulty']}  "
-          f"Max Steps={max_steps}")
+    print(f"[START] task={task_name} difficulty={task['difficulty']} max_steps={max_steps}", flush=True)
 
     result = await env_client.reset(task=task["difficulty"])
     obs    = result.observation
     initial_dist = float(obs.goal_dist)
-    print(f"[Start] Initial Goal Distance={initial_dist:.3f}  "
-          f"Goal Angle={obs.goal_angle:.3f}")
+    print(f"[START] task={task_name} initial_dist={initial_dist:.3f} goal_angle={obs.goal_angle:.3f}", flush=True)
 
     outcome           = "timeout"
     steps             = 0
@@ -258,7 +256,7 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
             )
             raw = completion.choices[0].message.content or ""
         except Exception as exc:
-            print(f"[Step {step_num}] LLM Error: {exc}")
+            print(f"[STEP] step={step_num} llm_error={exc}", flush=True)
             raw = ""
 
         action_dict = parse_action(raw) or FALLBACK_ACTION
@@ -270,10 +268,9 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
         final_dist = float(obs.goal_dist)
 
         lidar  = lidar_summary(obs.lidar_bins)
-        print(f"[Step {step_num}/{max_steps}] "
-              f"Reward={result.reward:+.2f}  Goal Distance={final_dist:.3f}  "
-              f"Front={lidar['front']}  Back={lidar['back']}  "
-              f"Left={lidar['left']}  Right={lidar['right']}  Done={result.done}")
+        print(f"[STEP] step={step_num} reward={result.reward:+.2f} goal_dist={final_dist:.3f} "
+              f"front={lidar['front']} back={lidar['back']} "
+              f"left={lidar['left']} right={lidar['right']} done={result.done}", flush=True)
 
         if result.done:
             break
@@ -287,10 +284,9 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
                   steps, max_steps, near_obstacle_steps)
 
     safety_pct = 100.0 * (1.0 - near_obstacle_steps / max(steps, 1))
-    print(f"[End]   Task={task_name}  Outcome={outcome.upper()}  "
-          f"Steps={steps}  Distance {initial_dist:.3f}→{final_dist:.3f}  "
-          f"Near Obstacle={near_obstacle_steps}/{steps} ({safety_pct:.0f}% Safe)  "
-          f"Score={score:.4f}")
+    print(f"[END] task={task_name} score={score:.4f} outcome={outcome} steps={steps} "
+          f"initial_dist={initial_dist:.3f} final_dist={final_dist:.3f} "
+          f"near_obstacle_steps={near_obstacle_steps} safety_pct={safety_pct:.0f}", flush=True)
 
     return dict(task=task_name, score=score, outcome=outcome,
                 steps=steps, initial_dist=initial_dist, final_dist=final_dist,
@@ -304,7 +300,7 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
 async def main_async() -> None:
     llm_client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
-    print(f"Connecting to Quadnav Environment at {ENV_URL}")
+    print(f"Connecting to Quadnav Environment at {ENV_URL}", flush=True)
     env_client = QuadnavEnv(base_url=ENV_URL)
 
     results = []
