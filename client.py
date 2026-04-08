@@ -37,7 +37,7 @@ class QuadnavEnv(EnvClient[QuadnavAction, QuadnavObservation, QuadnavState]):
 
     Example:
         >>> with QuadnavEnv(base_url="http://localhost:8000") as env:
-        ...     result = env.reset(difficulty="easy")
+        ...     result = env.reset(task="easy")
         ...     while not result.done:
         ...         action = QuadnavAction(vx=0.5, vy=0.0, yaw_rate=0.0)
         ...         result = env.step(action)
@@ -76,6 +76,9 @@ class QuadnavEnv(EnvClient[QuadnavAction, QuadnavObservation, QuadnavState]):
         return QuadnavState(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),
+            task=payload.get("task", "easy"),
+            map_id=payload.get("map_id", 0),
+            map_seed=payload.get("map_seed", 0),
             pos_x=payload.get("pos_x", 0.0),
             pos_y=payload.get("pos_y", 0.0),
             pos_z=payload.get("pos_z", 0.0),

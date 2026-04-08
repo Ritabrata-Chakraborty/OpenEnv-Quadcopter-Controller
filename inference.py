@@ -1,26 +1,14 @@
 """
-Quadnav Inference Script
-========================
-Runs an LLM-driven agent against the Quadnav environment across three tasks
-(easy / medium / hard) and reports a score for each.
-
-Required environment variables
--------------------------------
-API_BASE_URL  – OpenAI-compatible chat completions endpoint
-MODEL_NAME    – Model identifier (e.g. "meta-llama/Llama-3.3-70B-Instruct")
-HF_TOKEN      – Hugging Face / API key used as the OpenAI API key
-
-Optional environment variables
--------------------------------
-QUADNAV_ENV_URL – URL of a running Quadnav server (default: http://localhost:8000)
-
-Usage
------
-    # Start the environment server first (in a separate terminal):
-    #   cd envs/quadnav && uvicorn server.app:app --host 0.0.0.0 --port 8000
-    #
-    # Then run:
-    python inference.py
+Inference Script Example
+===================================
+MANDATORY
+- Before submitting, ensure the following variables are defined in your environment configuration:
+    API_BASE_URL   The API endpoint for the LLM.
+    MODEL_NAME     The model identifier to use for inference.
+    HF_TOKEN       Your Hugging Face / API key.
+    
+- The inference script must be named `inference.py` and placed in the root directory of the project
+- Participants must use OpenAI Client for all LLM calls using above variables
 """
 
 import asyncio
@@ -51,27 +39,27 @@ MAX_TOKENS: int = 80
 NEAR_OBSTACLE_THRESHOLD: float = 0.15
 
 # ---------------------------------------------------------------------------
-# Task definitions (easy → medium → hard, all share 600-step budget)
+# Task definitions (easy → medium → hard)
 # ---------------------------------------------------------------------------
 
 TASKS = [
     dict(name="easy",   difficulty="easy",   max_steps=600),
-    dict(name="medium", difficulty="medium", max_steps=600),
+    dict(name="medium", difficulty="medium", max_steps=400),
     dict(name="hard",   difficulty="hard",   max_steps=600),
 ]
 
 # ---------------------------------------------------------------------------
 # Grader
 #
-# Weighted metrics (all normalized to [0, 1]):
-#   progress   (0.50) – fraction of initial distance closed toward goal
-#   efficiency (0.30) – step economy: 1 – steps_taken / max_steps
-#   safety     (0.20) – fraction of steps spent away from obstacles
+# Unified scoring formula:
+#   score = 0.8 × progress + 0.1 × efficiency + 0.1 × safety
 #
-# Terminal bonuses / penalties applied to the weighted base:
-#   success  → full base score (minimum 0.60)
-#   timeout  → base × 0.85 (no efficiency credit)
-#   crash    → base × 0.30 (heavy penalty)
+# Where:
+#   progress   (0.80) – fraction of initial distance closed
+#   efficiency (0.10) – step economy: 1 – steps_taken / max_steps
+#   safety     (0.10) – fraction of steps spent away from obstacles
+#
+# Final score clamped to [0, 1] and rounded to 4 decimals.
 # ---------------------------------------------------------------------------
 
 def grade(
@@ -90,21 +78,10 @@ def grade(
     efficiency = 1.0 - steps / max_steps   if steps > 0 else 1.0
     safety     = 1.0 - near_obstacle_steps / max(steps, 1)
 
-    if outcome == "success":
-        base = 0.50 * progress + 0.30 * efficiency + 0.20 * safety
-        score = max(0.60, base)        # guarantee a meaningful success reward
-    elif outcome == "timeout":
-        base = 0.50 * progress + 0.20 * safety      # no efficiency credit
-        score = base * 0.85
-    else:  # crash
-        base = 0.50 * progress + 0.20 * safety
-        score = base * 0.30
+    score = 0.8 * progress + 0.1 * efficiency + 0.1 * safety
 
-    # Hard task amplifies penalty for crashes (no partial progress rewarded)
-    if task_name == "hard" and outcome == "crash":
-        score = 0.0
-
-    return round(min(1.0, max(0.0, score)), 4)
+    # Clamp strictly inside (0, 1) — validator rejects exactly 0.0 or 1.0
+    return round(min(0.9999, max(0.0001, score)), 4)
 
 
 # ---------------------------------------------------------------------------

@@ -253,8 +253,8 @@ class QuadnavEnvironment(Environment):
     def _build_episode_id(self) -> str:
         """Construct a human-readable episode ID from metadata.
 
-        Format: task_map(X)_goal(Y)_seed(Z)
-        Example: easy_map(3)_goal(5)_seed(1847291834)
+        Format: task_map(X)_seed(Z)
+        Example: easy_map(3)_seed(1847291834)
         """
         return f"{self._task}_map({self._map_id})_seed({self._map_seed})"
 

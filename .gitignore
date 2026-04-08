@@ -46,6 +46,7 @@ docs/_build/
 .claude/
 .vscode/
 .idea/
+CLAUDE.md
 
 # -----------------------------
 # OS Files
@@ -63,3 +64,4 @@ docker-compose.override.yml
 # -----------------------------
 *.swp
 *.swoassets/
+references/

@@ -238,18 +238,21 @@ from quadnav.client import QuadnavEnv
 from quadnav.models import QuadnavAction
 
 async with QuadnavEnv(base_url="http://localhost:8000") as env:
-    obs = await env.reset(task="easy")
-    
+    result = await env.reset(task="easy")
+
     for step in range(600):
-        # Example: simple forward motion
-        action = QuadnavAction(vx=0.7, vy=0.0, yaw_rate=0.0)
-        obs = await env.step(action)
-        
-        print(f"Step {step}: Distance={obs.goal_dist:.2f}, Reward={obs.reward:.2f}")
-        
-        if obs.done:
-            print(f"Episode Ended: {obs.done}")
+        if result.done:
             break
+        action = QuadnavAction(vx=0.7, vy=0.0, yaw_rate=0.0)
+        result = await env.step(action)
+        obs = result.observation
+
+        print(f"[STEP] step={step} reward={result.reward:+.2f} "
+              f"goal_dist={obs.goal_dist:.3f} done={result.done}", flush=True)
+
+    # Read final state after episode ends
+    state = await env.state()
+    print(f"[END] outcome={state.outcome} steps={state.step_count}", flush=True)
 ```
 
 ### 3. Web Interface (Optional)
