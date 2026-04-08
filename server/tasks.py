@@ -48,7 +48,7 @@ Difficulty = Literal["easy", "medium", "hard"]
 
 def clamp_score(score: float) -> float:
     """Clamp score strictly inside (0, 1) — validator rejects 0.0 and 1.0."""
-    return round(min(0.99, max(0.01, score)), 2)
+    return min(max(round(score, 4), 0.01), 0.99)
 
 
 def distance_progress(initial_dist: float, final_dist: float) -> float:

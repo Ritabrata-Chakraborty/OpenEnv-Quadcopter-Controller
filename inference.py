@@ -153,8 +153,8 @@ FALLBACK_ACTION = dict(vx=0.5, vy=0.0, yaw_rate=0.0)
 # Episode runner
 # ---------------------------------------------------------------------------
 
-async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) -> dict:
-    """Run one task episode; returns result dict with score and metrics."""
+async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) -> None:
+    """Run one task episode."""
     task_name = task["name"]
     max_steps = task["max_steps"]
 
@@ -209,9 +209,7 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
     # Score is computed server-side by the task's grader function.
     state = await env_client.state()
 
-    print(f"[END] task={task_name} score={state.score:.2f} outcome={state.outcome} steps={steps}", flush=True)
-
-    return dict(task=task_name, score=state.score, outcome=state.outcome, steps=steps)
+    print(f"[END] task={task_name} score={state.score:.4f} outcome={state.outcome} steps={steps}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -220,21 +218,11 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
 
 async def main_async() -> None:
     llm_client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
-    print(f"Connecting to Quadnav Environment at {ENV_URL}", flush=True)
     env_client = QuadnavEnv(base_url=ENV_URL)
 
-    results = []
     async with env_client:
         for task in TASKS:
-            result = await run_episode(env_client, llm_client, task)
-            results.append(result)
-
-    # Summary
-    total = 0.0
-    for r in results:
-        total += r["score"]
-    print(f"\n[SUMMARY] mean_score={total / len(results):.2f}", flush=True)
+            await run_episode(env_client, llm_client, task)
 
 
 def main() -> None:
