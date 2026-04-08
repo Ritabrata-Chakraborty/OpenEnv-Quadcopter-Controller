@@ -72,7 +72,7 @@ def grade(
     near_obstacle_steps: int,
 ) -> float:
     if initial_dist <= 0:
-        return 0.0001
+        return 0.01
 
     progress   = max(0.0, min(1.0, 1.0 - final_dist / initial_dist))
     efficiency = 1.0 - steps / max_steps   if steps > 0 else 1.0
@@ -81,7 +81,7 @@ def grade(
     score = 0.8 * progress + 0.1 * efficiency + 0.1 * safety
 
     # Clamp strictly inside (0, 1) — validator rejects exactly 0.0 or 1.0
-    return round(min(0.9999, max(0.0001, score)), 4)
+    return round(min(0.99, max(0.01, score)), 2)
 
 
 # ---------------------------------------------------------------------------

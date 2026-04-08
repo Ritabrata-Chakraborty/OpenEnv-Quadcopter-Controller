@@ -48,7 +48,7 @@ Difficulty = Literal["easy", "medium", "hard"]
 
 def clamp_score(score: float) -> float:
     """Clamp score strictly inside (0, 1) — validator rejects 0.0 and 1.0."""
-    return round(min(0.9999, max(0.0001, score)), 4)
+    return round(min(0.99, max(0.01, score)), 2)
 
 
 def distance_progress(initial_dist: float, final_dist: float) -> float:
@@ -71,7 +71,7 @@ def grade_easy(
 ) -> float:
     """Easy grader — open indoor maps.
 
-    success → ~0.9999
+    success → ~0.99
     crash   → partial credit (up to 0.3) based on distance progress
     timeout → partial credit (up to 0.8) based on distance progress
     """
@@ -92,8 +92,8 @@ def grade_medium(
 ) -> float:
     """Medium grader — denser indoor maps.
 
-    success → efficiency-weighted score in [0.75, ~0.9999] (faster = higher)
-    crash   → ~0.0001
+    success → efficiency-weighted score in [0.75, ~0.99] (faster = higher)
+    crash   → ~0.01
     timeout → partial credit (up to 0.55) based on distance progress
     """
     if outcome == "success":
@@ -113,8 +113,8 @@ def grade_hard(
 ) -> float:
     """Hard grader — outdoor terrain maps.
 
-    success → efficiency-weighted score in [0.7, ~0.9999]
-    crash   → ~0.0001
+    success → efficiency-weighted score in [0.7, ~0.99]
+    crash   → ~0.01
     timeout → partial credit (up to 0.3) based on distance progress
     """
     if outcome == "success":
