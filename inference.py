@@ -72,7 +72,7 @@ def grade(
     near_obstacle_steps: int,
 ) -> float:
     if initial_dist <= 0:
-        return 0.0
+        return 0.0001
 
     progress   = max(0.0, min(1.0, 1.0 - final_dist / initial_dist))
     efficiency = 1.0 - steps / max_steps   if steps > 0 else 1.0

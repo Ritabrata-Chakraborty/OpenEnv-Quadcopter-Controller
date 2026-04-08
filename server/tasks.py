@@ -46,7 +46,12 @@ Difficulty = Literal["easy", "medium", "hard"]
 # Shared helper
 # ---------------------------------------------------------------------------
 
-def _progress(initial_dist: float, final_dist: float) -> float:
+def clamp_score(score: float) -> float:
+    """Clamp score strictly inside (0, 1) — validator rejects 0.0 and 1.0."""
+    return round(min(0.9999, max(0.0001, score)), 4)
+
+
+def distance_progress(initial_dist: float, final_dist: float) -> float:
     """Fraction of initial distance closed, clamped to [0, 1]."""
     if initial_dist <= 0.0:
         return 1.0
@@ -57,79 +62,66 @@ def _progress(initial_dist: float, final_dist: float) -> float:
 # Graders
 # ---------------------------------------------------------------------------
 
-def _clamp_score(score: float) -> float:
-    """Clamp score strictly inside (0, 1) — validator rejects 0.0 and 1.0."""
-    return round(min(0.9999, max(0.0001, score)), 4)
-
-
-def _grade_easy(
+def grade_easy(
     outcome: str,
     initial_dist: float,
     final_dist: float,
     steps: int,
     max_steps: int,
 ) -> float:
-    """
-    Easy grader — open indoor maps.
+    """Easy grader — open indoor maps.
 
     success → ~0.9999
     crash   → partial credit (up to 0.3) based on distance progress
     timeout → partial credit (up to 0.8) based on distance progress
     """
     if outcome == "success":
-        return _clamp_score(1.0)
-    prog = _progress(initial_dist, final_dist)
+        return clamp_score(1.0)
+    prog = distance_progress(initial_dist, final_dist)
     if outcome == "crash":
-        return _clamp_score(prog * 0.3)
-    # timeout
-    return _clamp_score(prog * 0.8)
+        return clamp_score(prog * 0.3)
+    return clamp_score(prog * 0.8)
 
 
-def _grade_medium(
+def grade_medium(
     outcome: str,
     initial_dist: float,
     final_dist: float,
     steps: int,
     max_steps: int,
 ) -> float:
-    """
-    Medium grader — denser indoor maps.
+    """Medium grader — denser indoor maps.
 
-    success → efficiency-weighted score in [0.75, ~0.9999]
-              (finishing faster gives a higher score)
+    success → efficiency-weighted score in [0.75, ~0.9999] (faster = higher)
     crash   → ~0.0001
     timeout → partial credit (up to 0.55) based on distance progress
     """
     if outcome == "success":
         efficiency = 1.0 - (steps / max_steps) * 0.25
-        return _clamp_score(min(1.0, max(0.75, efficiency)))
+        return clamp_score(min(1.0, max(0.75, efficiency)))
     if outcome == "crash":
-        return _clamp_score(0.0)
-    prog = _progress(initial_dist, final_dist)
-    return _clamp_score(prog * 0.55)
+        return clamp_score(0.0)
+    return clamp_score(distance_progress(initial_dist, final_dist) * 0.55)
 
 
-def _grade_hard(
+def grade_hard(
     outcome: str,
     initial_dist: float,
     final_dist: float,
     steps: int,
     max_steps: int,
 ) -> float:
-    """
-    Hard grader — outdoor terrain maps.
+    """Hard grader — outdoor terrain maps.
 
     success → efficiency-weighted score in [0.7, ~0.9999]
     crash   → ~0.0001
     timeout → partial credit (up to 0.3) based on distance progress
     """
     if outcome == "success":
-        score = 1.0 - (steps / max_steps) * 0.3
-        return _clamp_score(min(1.0, max(0.7, score)))
+        return clamp_score(min(1.0, max(0.7, 1.0 - (steps / max_steps) * 0.3)))
     if outcome == "crash":
-        return _clamp_score(0.0)
-    prog = _progress(initial_dist, final_dist)
-    return _clamp_score(prog * 0.3)
+        return clamp_score(0.0)
+    return clamp_score(distance_progress(initial_dist, final_dist) * 0.3)
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +134,7 @@ class Task:
 
     name: str
     description: str
-    difficulty: Difficulty   # passed to reset(difficulty=...) on the server
+    difficulty: Difficulty
     max_steps: int
     grader: GraderFn
 
@@ -160,7 +152,7 @@ TASKS: list[Task] = [
         ),
         difficulty="easy",
         max_steps=MAX_STEPS_DEFAULT,
-        grader=_grade_easy,
+        grader=grade_easy,
     ),
     Task(
         name="medium",
@@ -170,7 +162,7 @@ TASKS: list[Task] = [
         ),
         difficulty="medium",
         max_steps=MAX_STEPS_MEDIUM,
-        grader=_grade_medium,
+        grader=grade_medium,
     ),
     Task(
         name="hard",
@@ -180,17 +172,17 @@ TASKS: list[Task] = [
         ),
         difficulty="hard",
         max_steps=MAX_STEPS_DEFAULT,
-        grader=_grade_hard,
+        grader=grade_hard,
     ),
 ]
 
-_TASK_MAP: dict[str, Task] = {t.name: t for t in TASKS}
+TASK_MAP: dict[str, Task] = {t.name: t for t in TASKS}
 
 
 def get_task(name: str) -> Task:
     """Return the Task with the given name, or raise KeyError."""
     try:
-        return _TASK_MAP[name]
+        return TASK_MAP[name]
     except KeyError:
-        valid = ", ".join(_TASK_MAP)
+        valid = ", ".join(TASK_MAP)
         raise KeyError(f"Unknown task {name!r}. Valid names: {valid}") from None
