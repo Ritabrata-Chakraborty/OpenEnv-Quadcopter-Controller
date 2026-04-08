@@ -24,16 +24,17 @@ Usage:
 
 try:
     from openenv.core.env_server.http_server import create_app
+    from openenv.core.env_server.types import SchemaResponse
 except Exception as e:  # pragma: no cover
     raise ImportError(
         "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
     ) from e
 
 try:
-    from ..models import QuadnavAction, QuadnavObservation
+    from ..models import QuadnavAction, QuadnavObservation, QuadnavState
     from .environment import QuadnavEnvironment
 except ModuleNotFoundError:
-    from quadnav.models import QuadnavAction, QuadnavObservation
+    from quadnav.models import QuadnavAction, QuadnavObservation, QuadnavState
     from quadnav.server.environment import QuadnavEnvironment
 
 
@@ -45,6 +46,30 @@ app = create_app(
     env_name="quadnav_env",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
+
+
+# Patch endpoint to include QuadnavState in schema
+# We replace the existing /schema endpoint by overwriting its function
+from starlette.routing import Route
+from typing import List
+
+# Find and remove the old /schema GET endpoint
+new_routes: List = []
+for route in app.routes:
+    if isinstance(route, Route) and route.path == "/schema" and "GET" in [m.upper() for m in (route.methods or [])]:
+        continue
+    new_routes.append(route)
+app.router.routes = new_routes
+
+# Now add our custom /schema endpoint
+@app.get("/schema", tags=["Schema"], response_model=SchemaResponse, include_in_schema=True)
+async def get_schemas_with_state() -> SchemaResponse:
+    """Get JSON schemas for action, observation, and state with correct QuadnavState."""
+    return SchemaResponse(
+        action=QuadnavAction.model_json_schema(),
+        observation=QuadnavObservation.model_json_schema(),
+        state=QuadnavState.model_json_schema(),
+    )
 
 
 def main(host: str = "0.0.0.0", port: int = 8000):
