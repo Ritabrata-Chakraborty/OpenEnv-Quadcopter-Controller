@@ -158,16 +158,12 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
     task_name = task["name"]
     max_steps = task["max_steps"]
 
-    # ── START ──────────────────────────────────────────────────────────────
-    print(f"[START] task={task_name} max_steps={max_steps}", flush=True)
+    print(f"[START] task={task_name}", flush=True)
 
     result = await env_client.reset(task=task_name)
     obs    = result.observation
-    print(f"[START] task={task_name} goal_dist={obs.goal_dist:.2f} goal_angle={obs.goal_angle:.2f}", flush=True)
+    steps  = 0
 
-    steps = 0
-
-    # ── STEP LOOP ──────────────────────────────────────────────────────────
     for step_num in range(1, max_steps + 1):
         if result.done:
             break
@@ -187,7 +183,6 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
             )
             raw = completion.choices[0].message.content or ""
         except Exception as exc:
-            print(f"[STEP] step={step_num} llm_error={exc}", flush=True)
             raw = ""
 
         action_dict = parse_action(raw) or FALLBACK_ACTION
@@ -197,19 +192,13 @@ async def run_episode(env_client: QuadnavEnv, llm_client: OpenAI, task: dict) ->
         obs    = result.observation
         steps  = step_num
 
-        lidar = lidar_summary(obs.lidar_bins)
-        print(f"[STEP] step={step_num} reward={result.reward:.2f} goal_dist={obs.goal_dist:.2f} "
-              f"front={lidar['front']} back={lidar['back']} "
-              f"left={lidar['left']} right={lidar['right']} done={result.done}", flush=True)
+        print(f"[STEP] step={step_num} reward={result.reward:.4f} done={result.done}", flush=True)
 
         if result.done:
             break
 
-    # ── END ────────────────────────────────────────────────────────────────
-    # Score is computed server-side by the task's grader function.
     state = await env_client.state()
-
-    print(f"[END] task={task_name} score={state.score:.4f} outcome={state.outcome} steps={steps}", flush=True)
+    print(f"[END] task={task_name} score={state.score:.4f} outcome={state.outcome}", flush=True)
 
 
 # ---------------------------------------------------------------------------
